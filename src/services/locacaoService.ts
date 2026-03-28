@@ -1,22 +1,14 @@
 import api from "@/lib/api";
+import type { Locacao } from "@/types/locacao";
+import { normalizarLocacaoApi } from "@/lib/normalizarLocacao";
 
-export interface Locacao {
-  id_loc: number;
-  dataLoc: string;
-  dataPrev: string;
-  dataDevolucao: string;
-  clienteId: number;
-  id_car: number;
-  placa_car: string;
-  modelo_car: string;
-  descricao_ctg: string;
-  nome_marca: string;
-}
+export type { Locacao } from "@/types/locacao";
+export { derivarStatusLocacao, locacaoEstaConcluida } from "@/lib/locacaoStatus";
 
 const locacaoService = {
   async listarLocacoes(): Promise<Locacao[]> {
-    const response = await api.get<Locacao[]>("/locacao");
-    return response.data;
+    const response = await api.get<Record<string, unknown>[]>("/locacao");
+    return response.data.map((row) => normalizarLocacaoApi(row));
   },
 };
 

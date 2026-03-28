@@ -1,9 +1,11 @@
 import api from '@/lib/api';
-import type { 
-  LoginRequest, 
-  RegisterRequest, 
-  ForgotPasswordRequest, 
-  AuthResponse 
+import type {
+  LoginRequest,
+  RegisterRequest,
+  ForgotPasswordRequest,
+  UpdateProfileRequest,
+  ChangePasswordRequest,
+  AuthResponse,
 } from '@/types/auth';
 
 export const authService = {
@@ -66,6 +68,36 @@ export const authService = {
   /**
    * Verifica se o usuário está autenticado e renova o token
    */
+  /**
+   * Atualiza nome e e-mail do usuário autenticado
+   */
+  async updateProfile(data: UpdateProfileRequest): Promise<AuthResponse> {
+    try {
+      const response = await api.patch<AuthResponse>('/auth/profile', data);
+      const token = response.data.access_token || response.data.token;
+      if (token) {
+        localStorage.setItem('authToken', token);
+      }
+      if (response.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
+      return response.data;
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  },
+
+  /**
+   * Altera a senha (usuário já autenticado)
+   */
+  async changePassword(data: ChangePasswordRequest): Promise<void> {
+    try {
+      await api.post('/auth/change-password', data);
+    } catch (error: any) {
+      throw this.handleError(error);
+    }
+  },
+
   async me(): Promise<AuthResponse> {
     try {
       const response = await api.get<AuthResponse>('/auth/me');

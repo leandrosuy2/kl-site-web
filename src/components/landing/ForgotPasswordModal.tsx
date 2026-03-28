@@ -16,9 +16,11 @@ import { authService } from "@/services/authService";
 interface ForgotPasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Pré-preenche o e-mail (ex.: tela de configurações logada) */
+  defaultEmail?: string;
 }
 
-const ForgotPasswordModal = ({ isOpen, onClose }: ForgotPasswordModalProps) => {
+const ForgotPasswordModal = ({ isOpen, onClose, defaultEmail }: ForgotPasswordModalProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -64,6 +66,7 @@ const ForgotPasswordModal = ({ isOpen, onClose }: ForgotPasswordModalProps) => {
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
+                key={defaultEmail ?? "forgot-email"}
                 id="forgot-email"
                 name="email"
                 type="email"
@@ -71,6 +74,7 @@ const ForgotPasswordModal = ({ isOpen, onClose }: ForgotPasswordModalProps) => {
                 className="pl-10"
                 disabled={isLoading}
                 required
+                defaultValue={defaultEmail ?? ""}
               />
             </div>
           </div>

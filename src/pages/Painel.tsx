@@ -1,18 +1,27 @@
-import locacaoService, { Locacao } from "@/services/locacaoService";
+import locacaoService, {
+  derivarStatusLocacao,
+  locacaoEstaConcluida,
+  type Locacao,
+} from "@/services/locacaoService";
+import type { StatusLocacaoPainel } from "@/types/locacao";
 import ListaDocVeiculos from "./ListaDocVeiculos";
-import { useState, useEffect } from "react";
+import ConfiguracoesPainel from "@/components/painel/ConfiguracoesPainel";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { authService } from "@/services/authService";
 import { reservaService } from "@/services/reservaService";
+import { multaBoletoService } from "@/services/multaBoletoService";
+import type { BoletoMulta, StatusBoletoMulta } from "@/types/multaBoleto";
 import { CancelReservationModal } from "@/components/landing/CancelReservationModal";
 import { useToast } from "@/hooks/use-toast";
 import { ReservaResponse } from "@/types/reserva";
 import { 
   LayoutDashboard, 
   Car, 
-  Users, 
   FileText, 
   Settings, 
   LogOut, 
@@ -27,35 +36,90 @@ import {
   Shield,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  ExternalLink,
+  Receipt,
+  RefreshCw,
+  Gauge,
+  Hash,
+  PlusCircle,
 } from "lucide-react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { NavLink, useNavigate, useParams } from "react-router-dom";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+const PAINEL_SECTIONS = [
+  "dashboard",
+  "locacao",
+  "reservas",
+  "manutencao",
+  "veiculos",
+  "boletos",
+  "configuracoes",
+] as const;
+
+type PainelSection = (typeof PAINEL_SECTIONS)[number];
 
 const Painel = () => {
+  const { section: sectionParam } = useParams<{ section: string }>();
+  const navigate = useNavigate();
+  const section = (sectionParam && PAINEL_SECTIONS.includes(sectionParam as PainelSection)
+    ? sectionParam
+    : "dashboard") as PainelSection;
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeMenu, setActiveMenu] = useState("dashboard");
   const [locacoes, setLocacoes] = useState<Locacao[]>([]);
   const [loadingLocacoes, setLoadingLocacoes] = useState(false);
+  const [erroLocacoes, setErroLocacoes] = useState<string | null>(null);
   const [user, setUser] = useState(authService.getUser());
   const [reservas, setReservas] = useState<ReservaResponse[]>([]);
   const [loadingReservas, setLoadingReservas] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [reservaIdParaCancelar, setReservaIdParaCancelar] = useState<number | null>(null);
+  const [boletosMultas, setBoletosMultas] = useState<BoletoMulta[]>([]);
+  const [loadingBoletos, setLoadingBoletos] = useState(false);
+  const [erroBoletos, setErroBoletos] = useState<string | null>(null);
   const { toast } = useToast();
   const isMobile = useIsMobile();
 
   useEffect(() => {
-    if (activeMenu === "frota") {
-      setLoadingLocacoes(true);
-      locacaoService.listarLocacoes()
-        .then(setLocacoes)
-        .catch(() => setLocacoes([]))
-        .finally(() => setLoadingLocacoes(false));
+    if (sectionParam && !PAINEL_SECTIONS.includes(sectionParam as PainelSection)) {
+      navigate("/painel/dashboard", { replace: true });
     }
-  }, [activeMenu]);
+  }, [sectionParam, navigate]);
+
+  const fetchLocacoes = useCallback(() => {
+    setLoadingLocacoes(true);
+    setErroLocacoes(null);
+    locacaoService
+      .listarLocacoes()
+      .then(setLocacoes)
+      .catch((err: { response?: { data?: { message?: string } } }) => {
+        setLocacoes([]);
+        setErroLocacoes(
+          err.response?.data?.message ??
+            "Não foi possível carregar suas locações. Verifique sua conexão e tente novamente."
+        );
+      })
+      .finally(() => setLoadingLocacoes(false));
+  }, []);
+
+  useEffect(() => {
+    if (section === "locacao") {
+      fetchLocacoes();
+    }
+  }, [section, fetchLocacoes]);
   // Abrir modal de cancelamento
   const abrirModalCancelar = (idReserva: number) => {
     setReservaIdParaCancelar(idReserva);
@@ -121,7 +185,7 @@ const Painel = () => {
     try {
       setLoadingReservas(true);
       // Buscar todas as reservas (admin ou painel)
-      const data = await reservaService.listarReservas();
+      const data = await reservaService.minhasReservas();
       setReservas(data);
     } catch (error) {
       console.error("Erro ao carregar reservas:", error);
@@ -131,10 +195,26 @@ const Painel = () => {
   };
 
   useEffect(() => {
-    if (activeMenu === "reservas") {
+    if (section === "reservas") {
       carregarReservas();
     }
-  }, [activeMenu]);
+  }, [section]);
+
+  useEffect(() => {
+    if (section !== "boletos") return;
+    setLoadingBoletos(true);
+    setErroBoletos(null);
+    multaBoletoService
+      .listar()
+      .then(setBoletosMultas)
+      .catch((err: { response?: { data?: { message?: string } } }) => {
+        setBoletosMultas([]);
+        setErroBoletos(
+          err.response?.data?.message || "Não foi possível carregar os boletos de multas."
+        );
+      })
+      .finally(() => setLoadingBoletos(false));
+  }, [section]);
 
   const getStatusBadge = (status: ReservaResponse["status"]) => {
     const statusConfig = {
@@ -181,15 +261,51 @@ const Painel = () => {
     return date.toLocaleString("pt-BR");
   };
 
-  const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "frota", label: "Locação", icon: Car },
-    { id: "reservas", label: "Reservas", icon: Calendar },
-    { id: "manutencao", label: "Manutenção", icon: Activity },
-    { id: "veiculos", label: "Doc Veículos", icon: FileText },
-    { id: "boletos", label: "Boletos", icon: DollarSign },
-    { id: "configuracoes", label: "Configurações", icon: Settings },
+  const getBoletoMultaStatusBadge = (status: StatusBoletoMulta) => {
+    const map: Record<
+      StatusBoletoMulta,
+      { label: string; className: string }
+    > = {
+      aberto: { label: "Em aberto", className: "bg-amber-500 text-white" },
+      pago: { label: "Pago", className: "bg-emerald-600 text-white" },
+      vencido: { label: "Vencido", className: "bg-red-600 text-white" },
+      cancelado: { label: "Cancelado", className: "bg-gray-500 text-white" },
+    };
+    const c = map[status];
+    return (
+      <span
+        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${c.className}`}
+      >
+        {c.label}
+      </span>
+    );
+  };
+
+  const copiarLinhaDigitavel = async (linha: string) => {
+    try {
+      await navigator.clipboard.writeText(linha.replace(/\D/g, ""));
+      toast({ title: "Linha digitável copiada" });
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Não foi possível copiar",
+        description: "Copie manualmente ou use o PDF do boleto.",
+      });
+    }
+  };
+
+  const menuItems: { path: PainelSection; label: string; icon: typeof LayoutDashboard }[] = [
+    { path: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "locacao", label: "Locação", icon: Car },
+    { path: "reservas", label: "Reservas", icon: Calendar },
+    { path: "manutencao", label: "Manutenção", icon: Activity },
+    { path: "veiculos", label: "Doc Veículos", icon: FileText },
+    { path: "boletos", label: "Boletos de multas", icon: Receipt },
+    { path: "configuracoes", label: "Minha conta", icon: Settings },
   ];
+
+  const tituloCabecalho =
+    menuItems.find((m) => m.path === section)?.label ?? "Painel";
 
   const stats = [
     { 
@@ -229,86 +345,320 @@ const Painel = () => {
     { action: "Nova reserva", client: "Ana Paula", vehicle: "Grupo G/a", time: "há 2 horas" },
   ];
 
+  const formatarDataHoraLoc = (s: string) => {
+    if (!s?.trim()) return "—";
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? s : d.toLocaleString("pt-BR");
+  };
+
+  const formatarValorLocacao = (v: string | number | null | undefined) => {
+    if (v == null || v === "") return null;
+    const n = typeof v === "number" ? v : parseFloat(String(v).replace(",", "."));
+    if (Number.isNaN(n)) return null;
+    return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  };
+
+  const badgeStatusPainel = (st: StatusLocacaoPainel) => {
+    const cfg: Record<
+      StatusLocacaoPainel,
+      { label: string; className: string; Icon: typeof Activity }
+    > = {
+      em_andamento: {
+        label: "Em andamento",
+        className: "bg-blue-600 text-white hover:bg-blue-600",
+        Icon: Activity,
+      },
+      concluida: {
+        label: "Concluída",
+        className: "bg-emerald-700 text-white hover:bg-emerald-700",
+        Icon: CheckCircle,
+      },
+      atrasada: {
+        label: "Atrasada (vs. previsão)",
+        className: "bg-amber-600 text-white hover:bg-amber-600",
+        Icon: AlertCircle,
+      },
+    };
+    const c = cfg[st];
+    const I = c.Icon;
+    return (
+      <Badge className={`gap-1 font-semibold ${c.className}`}>
+        <I className="h-3.5 w-3.5" />
+        {c.label}
+      </Badge>
+    );
+  };
+
+  const locacoesAtivasCount = locacoes.filter((l) => !locacaoEstaConcluida(l)).length;
+  const locacoesConcluidasCount = locacoes.length - locacoesAtivasCount;
+
   // Telas base para cada menu
   const ListaLocacao = () => (
     <div className="space-y-4 sm:space-y-6">
-      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Locações</h2>
-      <p className="text-sm sm:text-base text-gray-600 mb-4">Visualize e gerencie suas locações.</p>
-      {loadingLocacoes ? (
-        <div className="flex items-center justify-center h-64">
-          <p className="text-gray-500">Carregando locações...</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">Locações</h2>
+          <p className="text-sm sm:text-base text-gray-600">
+            Veículos em seu nome: períodos, devolução e status atualizados. O agendamento inicia em{" "}
+            <NavLink to="/frota" className="text-emerald-700 font-medium hover:underline">
+              Locação no site
+            </NavLink>
+            ; após a retirada, o contrato aparece aqui.
+          </p>
         </div>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => fetchLocacoes()}
+            disabled={loadingLocacoes}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${loadingLocacoes ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
+          <Button type="button" size="sm" className="gap-2" asChild>
+            <NavLink to="/painel/reservas">Reservas / agendamentos</NavLink>
+          </Button>
+        </div>
+      </div>
+
+      {!loadingLocacoes && locacoes.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Card className="border-blue-100 bg-blue-50/50">
+            <CardContent className="pt-4 pb-4">
+              <p className="text-xs font-medium text-blue-900 uppercase tracking-wide">Em aberto</p>
+              <p className="text-2xl font-bold text-blue-950">{locacoesAtivasCount}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-emerald-100 bg-emerald-50/50">
+            <CardContent className="pt-4 pb-4">
+              <p className="text-xs font-medium text-emerald-900 uppercase tracking-wide">Concluídas</p>
+              <p className="text-2xl font-bold text-emerald-950">{locacoesConcluidasCount}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-gray-200 bg-gray-50/80">
+            <CardContent className="pt-4 pb-4">
+              <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total</p>
+              <p className="text-2xl font-bold text-gray-900">{locacoes.length}</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {loadingLocacoes ? (
+        <div className="flex flex-col items-center justify-center h-64 gap-2">
+          <RefreshCw className="h-8 w-8 text-emerald-600 animate-spin" />
+          <p className="text-gray-600">Carregando locações...</p>
+        </div>
+      ) : erroLocacoes ? (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-8 text-center space-y-4">
+            <AlertCircle className="h-12 w-12 text-red-600 mx-auto" />
+            <p className="font-medium text-red-900">{erroLocacoes}</p>
+            <Button type="button" variant="secondary" onClick={() => fetchLocacoes()}>
+              Tentar novamente
+            </Button>
+          </CardContent>
+        </Card>
       ) : locacoes.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center text-gray-400">
-            <Car className="w-16 h-16 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold mb-2">Nenhuma locação encontrada</h3>
-            <p className="text-gray-500">Você ainda não possui locações cadastradas.</p>
+          <CardContent className="py-12 text-center text-gray-500 space-y-4">
+            <Car className="w-16 h-16 mx-auto text-gray-400" />
+            <div>
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">Nenhuma locação registrada</h3>
+              <p className="max-w-md mx-auto">
+                Quando você retirar um veículo, o contrato será listado aqui com datas e status. Faça um
+                agendamento primeiro.
+              </p>
+            </div>
+            <Button asChild>
+              <NavLink to="/frota">Ir para locação e agendar</NavLink>
+            </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
-          {locacoes.map((loc) => (
-            <Card key={loc.id_loc} className="hover:shadow-lg transition-shadow">
-              <CardHeader className="bg-gray-50 p-3 sm:p-4 md:p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                      <CardTitle className="text-base sm:text-lg md:text-xl truncate">{loc.modelo_car} ({loc.placa_car})</CardTitle>
-                      <span className="text-xs bg-emerald-100 text-emerald-700 rounded px-2 py-1 whitespace-nowrap">{loc.nome_marca}</span>
-                      {loc.dataDevolucao === null || loc.dataDevolucao === undefined ? (
-                        <span className="text-xs bg-green-100 text-green-800 rounded px-2 py-1 whitespace-nowrap">Aberta</span>
-                      ) : (
-                        <span className="text-xs bg-red-100 text-red-700 rounded px-2 py-1 whitespace-nowrap">Fechada</span>
+          {locacoes.map((loc) => {
+            const statusPainel = derivarStatusLocacao(loc);
+            const valorFmt = formatarValorLocacao(loc.valor_total);
+            return (
+              <Card key={loc.id_loc} className="overflow-hidden border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="bg-gradient-to-r from-gray-50 to-white p-4 sm:p-6 border-b">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-2 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <CardTitle className="text-lg sm:text-xl leading-tight">
+                          {loc.modelo_car}
+                          <span className="text-gray-500 font-normal"> · {loc.placa_car}</span>
+                        </CardTitle>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {badgeStatusPainel(statusPainel)}
+                        <Badge variant="outline" className="text-emerald-800 border-emerald-200 bg-emerald-50">
+                          {loc.nome_marca}
+                        </Badge>
+                        {loc.status && (
+                          <Badge variant="secondary" className="font-normal text-xs">
+                            API: {loc.status}
+                          </Badge>
+                        )}
+                      </div>
+                      {(loc.grupo_nome || loc.descricao_ctg) && (
+                        <p className="text-sm text-gray-600">
+                          <span className="font-medium text-gray-700">Grupo / categoria:</span>{" "}
+                          {loc.grupo_nome || loc.descricao_ctg}
+                        </p>
+                      )}
+                      {statusPainel === "atrasada" && (
+                        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                          A data prevista de devolução já passou e não há devolução registrada no sistema.
+                          Entre em contato com a locadora ou finalize a devolução do veículo.
+                        </p>
                       )}
                     </div>
-                    <p className="text-xs sm:text-sm text-gray-600">
-                      Categoria: {loc.descricao_ctg}
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-3 sm:p-4 md:p-6">
-                <div className="grid sm:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
-                  <div className="space-y-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                      <span className="font-medium text-xs sm:text-sm">Data Locação:</span>
-                      <span className="text-xs sm:text-sm">{new Date(loc.dataLoc).toLocaleString("pt-BR")}</span>
+                    <div className="flex flex-col items-start gap-1 text-sm text-gray-600 lg:text-right lg:items-end shrink-0">
+                      <span className="inline-flex items-center gap-1.5 text-gray-500">
+                        <Hash className="h-4 w-4" />
+                        Contrato #{loc.id_loc}
+                      </span>
+                      {loc.id_reserva != null && (
+                        <span className="text-xs">Reserva associada #{loc.id_reserva}</span>
+                      )}
+                      {valorFmt && (
+                        <span className="text-base font-semibold text-gray-900">{valorFmt}</span>
+                      )}
                     </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                      <span className="font-medium text-xs sm:text-sm">Previsão Devolução:</span>
-                      <span className="text-xs sm:text-sm">{new Date(loc.dataPrev).toLocaleString("pt-BR")}</span>
-                    </div>
-                    {loc.dataDevolucao && (
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                        <span className="font-medium text-xs sm:text-sm">Data Devolução:</span>
-                        <span className="text-xs sm:text-sm">{new Date(loc.dataDevolucao).toLocaleString("pt-BR")}</span>
-                      </div>
-                    )}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6">
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Cronograma
+                      </h4>
+                      <Separator />
+                      <dl className="space-y-2 text-sm">
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-gray-600 shrink-0">Início da locação</dt>
+                          <dd className="font-medium text-right">{formatarDataHoraLoc(loc.dataLoc)}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-gray-600 shrink-0">Previsão de devolução</dt>
+                          <dd className="font-medium text-right">{formatarDataHoraLoc(loc.dataPrev)}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-gray-600 shrink-0">Devolução efetiva</dt>
+                          <dd className="font-medium text-right">
+                            {locacaoEstaConcluida(loc) && loc.dataDevolucao
+                              ? formatarDataHoraLoc(loc.dataDevolucao)
+                              : "—"}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-2">
+                        <Car className="h-4 w-4" />
+                        Veículo e unidade
+                      </h4>
+                      <Separator />
+                      <dl className="space-y-2 text-sm">
+                        {(loc.loja_retirada || loc.loja_devolucao) && (
+                          <>
+                            {loc.loja_retirada && (
+                              <div className="flex justify-between gap-4">
+                                <dt className="text-gray-600 shrink-0">Loja retirada</dt>
+                                <dd className="font-medium text-right">{loc.loja_retirada}</dd>
+                              </div>
+                            )}
+                            {loc.loja_devolucao && (
+                              <div className="flex justify-between gap-4">
+                                <dt className="text-gray-600 shrink-0">Loja devolução</dt>
+                                <dd className="font-medium text-right">{loc.loja_devolucao}</dd>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        {(loc.km_inicial != null || loc.km_final != null) && (
+                          <div className="flex justify-between gap-4">
+                            <dt className="text-gray-600 shrink-0 inline-flex items-center gap-1">
+                              <Gauge className="h-4 w-4" />
+                              Quilometragem
+                            </dt>
+                            <dd className="font-medium text-right">
+                              {loc.km_inicial != null ? `${loc.km_inicial.toLocaleString("pt-BR")} km` : "—"}
+                              {" → "}
+                              {loc.km_final != null ? `${loc.km_final.toLocaleString("pt-BR")} km` : "—"}
+                            </dd>
+                          </div>
+                        )}
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-gray-600 shrink-0">ID veículo</dt>
+                          <dd className="font-medium text-right">{loc.id_car ?? "—"}</dd>
+                        </div>
+                      </dl>
+                      {loc.observacoes && (
+                        <p className="text-xs text-gray-600 bg-gray-50 rounded-md p-3 border mt-2">
+                          <span className="font-semibold text-gray-700">Observações: </span>
+                          {loc.observacoes}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
   );
 
-  const ListaReservas = ({ reservas, loadingReservas }) => (
+  const ListaReservas = ({
+    reservas,
+    loadingReservas,
+  }: {
+    reservas: ReservaResponse[];
+    loadingReservas: boolean;
+  }) => (
     <div className="space-y-4 sm:space-y-6">
-      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Minhas Reservas</h2>
-      <p className="text-sm sm:text-base text-gray-600 mb-4">Visualize e gerencie suas reservas de veículos.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">Minhas reservas</h2>
+          <p className="text-sm sm:text-base text-gray-600">
+            Visualize agendamentos e cancele os pendentes quando precisar.
+          </p>
+        </div>
+        <Button asChild className="shrink-0 gap-2 w-full sm:w-auto">
+          <NavLink to="/frota">
+            <PlusCircle className="h-4 w-4" />
+            Nova reserva
+          </NavLink>
+        </Button>
+      </div>
       {loadingReservas ? (
         <div className="flex items-center justify-center h-64">
           <p className="text-gray-500">Carregando reservas...</p>
         </div>
       ) : reservas.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center text-gray-400">
-            <Calendar className="w-16 h-16 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold mb-2">Nenhuma reserva encontrada</h3>
-            <p className="text-gray-500">Você ainda não possui reservas cadastradas.</p>
+          <CardContent className="py-12 text-center text-gray-500 space-y-4">
+            <Calendar className="w-16 h-16 mx-auto text-gray-400" />
+            <div>
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">Nenhuma reserva ainda</h3>
+              <p className="max-w-md mx-auto">
+                Escolha um grupo na frota e conclua sua reserva em poucos passos.
+              </p>
+            </div>
+            <Button asChild className="gap-2">
+              <NavLink to="/frota">
+                <PlusCircle className="h-4 w-4" />
+                Fazer nova reserva
+              </NavLink>
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -512,29 +862,143 @@ const Painel = () => {
 
   const ListaBoletos = () => (
     <div className="space-y-4 sm:space-y-6">
-      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Boletos</h2>
-      <p className="text-sm sm:text-base text-gray-600 mb-4">Visualize e gerencie seus boletos.</p>
-      <Card>
-        <CardContent className="py-12 text-center text-gray-400">
-          <DollarSign className="w-16 h-16 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold mb-2">Nenhum boleto encontrado</h3>
-          <p className="text-gray-500">Você ainda não possui boletos cadastrados.</p>
-        </CardContent>
-      </Card>
-    </div>
-  );
+      <div>
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Boletos de multas</h2>
+        <p className="text-sm sm:text-base text-gray-600">
+          Consulte pendências de multas de trânsito, linha digitável e links para pagamento em um só lugar.
+        </p>
+      </div>
 
-  const ListaConfiguracoes = () => (
-    <div className="space-y-4 sm:space-y-6">
-      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Configurações</h2>
-      <p className="text-sm sm:text-base text-gray-600 mb-4">Gerencie suas preferências e configurações do sistema.</p>
-      <Card>
-        <CardContent className="py-12 text-center text-gray-400">
-          <Settings className="w-16 h-16 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold mb-2">Nenhuma configuração personalizada</h3>
-          <p className="text-gray-500">Personalize o sistema conforme suas necessidades.</p>
-        </CardContent>
-      </Card>
+      {loadingBoletos ? (
+        <div className="flex items-center justify-center h-48">
+          <p className="text-gray-500">Carregando boletos...</p>
+        </div>
+      ) : erroBoletos ? (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-8 text-center text-red-800">
+            <p className="font-medium">{erroBoletos}</p>
+          </CardContent>
+        </Card>
+      ) : boletosMultas.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-gray-400">
+            <Receipt className="w-16 h-16 mx-auto mb-4 opacity-80" />
+            <h3 className="text-xl font-semibold mb-2 text-gray-700">Nenhum boleto de multa</h3>
+            <p className="text-gray-500 max-w-md mx-auto">
+              Quando houver multas com boleto disponível, elas aparecerão aqui para consulta e pagamento.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <div className="hidden md:block rounded-md border bg-white overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead>Placa / auto</TableHead>
+                  <TableHead>Vencimento</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {boletosMultas.map((b) => (
+                  <TableRow key={b.id}>
+                    <TableCell className="font-medium max-w-[220px]">{b.descricao}</TableCell>
+                    <TableCell className="text-sm text-gray-600 whitespace-nowrap">
+                      {[b.placa, b.autoInfracao].filter(Boolean).join(" · ") || "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {formatarData(b.dataVencimento)}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      R$ {parseFloat(b.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell>{getBoletoMultaStatusBadge(b.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {b.linhaDigitavel && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => copiarLinhaDigitavel(b.linhaDigitavel!)}
+                          >
+                            <Copy className="w-4 h-4 mr-1" />
+                            Copiar linha
+                          </Button>
+                        )}
+                        {b.urlPdf && (
+                          <Button type="button" variant="outline" size="sm" asChild>
+                            <a href={b.urlPdf} target="_blank" rel="noopener noreferrer">
+                              PDF
+                            </a>
+                          </Button>
+                        )}
+                        {b.urlPagamento && (
+                          <Button type="button" size="sm" asChild>
+                            <a href={b.urlPagamento} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="w-4 h-4 mr-1" />
+                              Pagar
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="md:hidden space-y-4">
+            {boletosMultas.map((b) => (
+              <Card key={b.id}>
+                <CardHeader className="pb-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <CardTitle className="text-base leading-snug">{b.descricao}</CardTitle>
+                    {getBoletoMultaStatusBadge(b.status)}
+                  </div>
+                  <CardDescription>
+                    Venc.: {formatarData(b.dataVencimento)} · R${" "}
+                    {parseFloat(b.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-2 pt-0">
+                  {b.linhaDigitavel && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copiarLinhaDigitavel(b.linhaDigitavel!)}
+                    >
+                      <Copy className="w-4 h-4 mr-1" />
+                      Copiar linha
+                    </Button>
+                  )}
+                  {b.urlPdf && (
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <a href={b.urlPdf} target="_blank" rel="noopener noreferrer">
+                        Abrir PDF
+                      </a>
+                    </Button>
+                  )}
+                  {b.urlPagamento && (
+                    <Button type="button" size="sm" asChild>
+                      <a href={b.urlPagamento} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="w-4 h-4 mr-1" />
+                        Pagar
+                      </a>
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 
@@ -592,24 +1056,35 @@ const Painel = () => {
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeMenu === item.id;
           return (
-            <button
-              key={item.id}
-              onClick={() => {
-                setActiveMenu(item.id);
-                onItemClick?.();
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors shadow-sm
+            <NavLink
+              key={item.path}
+              to={`/painel/${item.path}`}
+              end={item.path === "dashboard"}
+              onClick={() => onItemClick?.()}
+              className={({ isActive }) =>
+                `w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors shadow-sm
                 ${isActive ? "bg-emerald-500 text-white shadow-md" : "text-gray-700 hover:bg-emerald-50"}
-                ${!sidebarOpen && "justify-center"}`}
-              style={{ fontWeight: isActive ? 600 : 500, letterSpacing: 0.2 }}
+                ${!sidebarOpen ? "justify-center" : ""}`
+              }
+              style={{ fontWeight: 500, letterSpacing: 0.2 }}
             >
-              <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? "text-white" : "text-emerald-600"}`} />
-              {sidebarOpen && (
-                <span className="text-sm font-medium tracking-wide">{item.label}</span>
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    className={`w-5 h-5 flex-shrink-0 ${isActive ? "text-white" : "text-emerald-600"}`}
+                  />
+                  {sidebarOpen && (
+                    <span
+                      className="text-sm font-medium tracking-wide"
+                      style={{ fontWeight: isActive ? 600 : 500 }}
+                    >
+                      {item.label}
+                    </span>
+                  )}
+                </>
               )}
-            </button>
+            </NavLink>
           );
         })}
       </nav>
@@ -685,7 +1160,7 @@ const Painel = () => {
               </Button>
             )}
             <h1 className="text-lg sm:text-xl md:text-2xl font-heading font-bold text-gray-900">
-              Dashboard
+              {tituloCabecalho}
             </h1>
           </div>
           
@@ -717,9 +1192,9 @@ const Painel = () => {
           </div>
         </header>
 
-        {/* Content */}
-        <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6">
-          {activeMenu === "dashboard" && (
+        {/* Content — mesma largura máxima centralizada em todas as seções */}
+        <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 w-full max-w-7xl mx-auto">
+          {section === "dashboard" && (
             // Conteúdo do Dashboard original
             <>
               {/* Stats Grid */}
@@ -830,12 +1305,17 @@ const Painel = () => {
           </Card>
             </>
           )}
-          {activeMenu === "frota" && <ListaLocacao />}
-          {activeMenu === "reservas" && <ListaReservas reservas={reservas} loadingReservas={loadingReservas} />}
-          {activeMenu === "manutencao" && <ListaManutencao />}
-          {activeMenu === "veiculos" && <ListaDocVeiculos />}
-          {activeMenu === "boletos" && <ListaBoletos />}
-          {activeMenu === "configuracoes" && <ListaConfiguracoes />}
+          {section === "locacao" && <ListaLocacao />}
+          {section === "reservas" && <ListaReservas reservas={reservas} loadingReservas={loadingReservas} />}
+          {section === "manutencao" && <ListaManutencao />}
+          {section === "veiculos" && <ListaDocVeiculos />}
+          {section === "boletos" && <ListaBoletos />}
+          {section === "configuracoes" && (
+            <ConfiguracoesPainel
+              user={user}
+              onProfileSynced={() => setUser(authService.getUser())}
+            />
+          )}
         </div>
       </main>
     </div>

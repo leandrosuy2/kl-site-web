@@ -30,8 +30,9 @@ import { decodeId } from "@/lib/encode";
 import Header from "@/components/landing/Header";
 import Footer from "@/components/landing/Footer";
 import { CancelReservationModal } from "@/components/landing/CancelReservationModal";
-
-
+import { authService } from "@/services/authService";
+import { savePendingBookingPath } from "@/components/RedirectAfterLogin";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const FrotaDetalhes = () => {
   const { id } = useParams();
@@ -282,6 +283,16 @@ const FrotaDetalhes = () => {
 
   // Função para criar a reserva
   const handleReservar = async () => {
+    if (!authService.isAuthenticated()) {
+      savePendingBookingPath(window.location.pathname + window.location.search);
+      toast({
+        title: "Faça login para agendar",
+        description: "Entre na sua conta ou cadastre-se. Você voltará a esta tela para concluir a reserva.",
+      });
+      navigate("/");
+      return;
+    }
+
     // Validações
     if (!lojaSelecionada) {
       toast({
@@ -342,12 +353,12 @@ const FrotaDetalhes = () => {
       }
       toast({
         title: "Reserva realizada!",
-        description: "Sua reserva foi criada com sucesso. Em breve você receberá um e-mail de confirmação.",
+        description:
+          "Sua reserva foi registrada. Acompanhe o status em Painel → Reservas. Após a retirada do veículo, o contrato aparece em Painel → Locação.",
       });
 
-      // Redirecionar para página de confirmação ou painel
       setTimeout(() => {
-        navigate("/painel");
+        navigate("/painel/reservas");
       }, 2000);
 
     } catch (error: any) {
@@ -467,7 +478,14 @@ const FrotaDetalhes = () => {
                 <Card>
                   <CardContent className="p-6 space-y-6">
                     <div>
-                      <h2 className="text-2xl font-bold mb-4">Fazer Reserva</h2>
+                      <h2 className="text-2xl font-bold mb-4">Agendar locação</h2>
+                      {!authService.isAuthenticated() && (
+                        <Alert className="mb-4 border-amber-200 bg-amber-50 text-amber-950">
+                          <AlertDescription>
+                            Para concluir o agendamento, faça login ou cadastre-se. Use o botão no topo do site.
+                          </AlertDescription>
+                        </Alert>
+                      )}
                       
                       {/* Tipo de Locação */}
                       <div className="space-y-2 mb-4">

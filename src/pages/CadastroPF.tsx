@@ -318,7 +318,7 @@ const CadastroPF = () => {
 
       // Redirecionar após sucesso
       setTimeout(() => {
-        navigate("/painel");
+        navigate("/painel/dashboard");
       }, 2000);
     } catch (error: any) {
       toast({

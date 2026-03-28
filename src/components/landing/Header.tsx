@@ -181,12 +181,17 @@ const Header = ({ transparent = false }: HeaderProps = {}) => {
           </nav>
 
           {/* Auth Buttons / User Area */}
-          <div className="flex items-center gap-1.5 sm:gap-2 ml-2 sm:ml-4">
+          <div
+            className={cn(
+              "flex items-center gap-1.5 sm:gap-2",
+              user ? "md:ml-4" : "ml-2 sm:ml-4"
+            )}
+          >
             {user ? (
-              // Usuário logado
-              <>
+              // Usuário logado: barra só no desktop; no mobile avatar/Painel/Sair ficam no menu
+              <div className="hidden md:flex items-center gap-1.5 sm:gap-2">
                 <div className={cn(
-                  "hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors",
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors",
                   (isScrolled || !transparent)
                     ? "bg-emerald-50" 
                     : "bg-white/10"
@@ -212,7 +217,7 @@ const Header = ({ transparent = false }: HeaderProps = {}) => {
                   </span>
                 </div>
                 <button
-                  onClick={() => window.location.href = '/painel'}
+                  onClick={() => navigate("/painel/dashboard")}
                   className={cn(
                     "flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full font-bold text-xs sm:text-sm transition-all active:scale-95 whitespace-nowrap",
                     (isScrolled || !transparent)
@@ -220,17 +225,16 @@ const Header = ({ transparent = false }: HeaderProps = {}) => {
                       : "bg-white text-emerald-600 hover:bg-emerald-50"
                   )}
                 >
-                  <span className="hidden sm:inline">Painel</span>
-                  <span className="sm:hidden">P</span>
+                  Painel
                 </button>
                 <button
                   onClick={handleLogout}
                   className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-red-500 text-white rounded-full font-bold text-xs sm:text-sm hover:bg-red-600 transition-all active:scale-95 whitespace-nowrap"
                 >
                   <LogOut className="w-3.5 h-3.5 md:w-4 md:h-4" strokeWidth={2.5} />
-                  <span className="hidden sm:inline">Sair</span>
+                  Sair
                 </button>
-              </>
+              </div>
             ) : (
               // Usuário não logado
               <>
@@ -277,8 +281,8 @@ const Header = ({ transparent = false }: HeaderProps = {}) => {
 
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
-          <div className="md:hidden absolute top-full left-0 right-0 bg-background shadow-card py-6 px-4 animate-fade-in">
-            <nav className="flex flex-col gap-2">
+          <div className="md:hidden absolute top-full left-0 right-0 bg-background shadow-card py-4 px-4 animate-fade-in">
+            <nav className="flex flex-col gap-1.5">
               {navLinks.map((link) => {
                 const Icon = link.icon;
                 const isInternalRoute = link.internal || link.href.startsWith('/');
@@ -295,12 +299,12 @@ const Header = ({ transparent = false }: HeaderProps = {}) => {
                         }
                         setIsMobileMenuOpen(false);
                       }}
-                      className="group flex items-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg transition-all hover:bg-emerald-50 active:scale-95 w-full text-left"
+                      className="group flex items-center gap-2.5 whitespace-nowrap px-3 py-2 rounded-lg transition-all hover:bg-emerald-50 active:scale-[0.99] w-full text-left min-h-[44px]"
                     >
-                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-600 shadow-md group-hover:scale-110 transition-transform flex-shrink-0">
-                        <Icon className="w-4 h-4 text-white" strokeWidth={2.5} />
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-600 shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
+                        <Icon className="w-4 h-4 text-white" strokeWidth={2.25} />
                       </div>
-                      <span className="text-emerald-900 font-bold text-sm tracking-wide">
+                      <span className="text-emerald-900 font-semibold text-sm">
                         {link.label}
                       </span>
                     </button>
@@ -313,17 +317,58 @@ const Header = ({ transparent = false }: HeaderProps = {}) => {
                     href={link.href}
                     {...(link.external && { target: "_blank", rel: "noopener noreferrer" })}
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="group flex items-center gap-2 whitespace-nowrap px-3 py-2 rounded-lg transition-all hover:bg-emerald-50 active:scale-95"
+                    className="group flex items-center gap-2.5 whitespace-nowrap px-3 py-2 rounded-lg transition-all hover:bg-emerald-50 active:scale-[0.99] min-h-[44px]"
                   >
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-600 shadow-md group-hover:scale-110 transition-transform flex-shrink-0">
-                      <Icon className="w-4 h-4 text-white" strokeWidth={2.5} />
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-600 shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
+                      <Icon className="w-4 h-4 text-white" strokeWidth={2.25} />
                     </div>
-                    <span className="text-emerald-900 font-bold text-sm tracking-wide">
+                    <span className="text-emerald-900 font-semibold text-sm">
                       {link.label}
                     </span>
                   </a>
                 );
               })}
+
+              {user && (
+                <div className="mt-3 pt-3 border-t border-emerald-100 flex flex-col gap-2">
+                  <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-emerald-50">
+                    <div className="flex items-center justify-center w-9 h-9 rounded-full text-sm font-semibold bg-emerald-600 text-white shrink-0">
+                      {(user?.nome || user?.nome_cli)
+                        ? (user.nome || user.nome_cli).charAt(0).toUpperCase()
+                        : "U"}
+                    </div>
+                    <span className="font-medium text-sm text-emerald-900 truncate">
+                      {(() => {
+                        const fullName = (user?.nome || user?.nome_cli || "Usuário").trim();
+                        const parts = fullName.split(" ");
+                        if (parts.length === 1) return parts[0];
+                        return `${parts[0]} ${parts[parts.length - 1]}`;
+                      })()}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigate("/painel/dashboard");
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="flex items-center justify-center min-h-[44px] px-4 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-all active:scale-[0.99]"
+                  >
+                    Painel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleLogout();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="flex items-center justify-center gap-2 min-h-[44px] px-4 rounded-lg text-sm font-semibold bg-red-500 text-white hover:bg-red-600 transition-all active:scale-[0.99]"
+                  >
+                    <LogOut className="w-4 h-4 shrink-0" strokeWidth={2.25} />
+                    Sair
+                  </button>
+                </div>
+              )}
             </nav>
           </div>
         )}

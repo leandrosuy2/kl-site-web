@@ -23,11 +23,11 @@ const buttonVariants = cva(
         heroOutline: "border-2 border-foreground/20 bg-background/80 text-foreground backdrop-blur-sm hover:bg-background hover:border-primary hover:text-primary",
       },
       size: {
-        default: "h-11 px-6 py-2",
-        sm: "h-9 rounded-md px-4 text-xs",
-        lg: "h-14 rounded-xl px-10 text-base",
-        xl: "h-16 rounded-xl px-12 text-lg",
-        icon: "h-10 w-10",
+        default: "h-10 px-4 py-2",
+        sm: "h-8 rounded-md px-3 text-xs",
+        lg: "h-11 rounded-lg px-6 text-sm",
+        xl: "h-12 rounded-lg px-7 text-sm",
+        icon: "h-9 w-9",
       },
     },
     defaultVariants: {
